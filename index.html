@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Online Notepad</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap');
+body { margin:0; font-family:'Cairo', sans-serif; background:#f4f4f9; }
+header { background:#4e73df; color:white; padding:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+header h1 { margin:0; font-size:1.5em; }
+header div { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:5px; }
+header button { background:white; color:#4e73df; border:none; padding:8px 12px; border-radius:5px; cursor:pointer; font-weight:600; }
+header input, header select { padding:7px; border-radius:5px; border:none; }
+#main { display:flex; height:calc(100vh - 90px); }
+#sidebar { width:250px; background:white; border-right:1px solid #ccc; padding:10px; overflow-y:auto; }
+#sidebar h2 { font-size:1.2em; margin-top:0; }
+.page-item { display:flex; justify-content:space-between; align-items:center; padding:8px; border-radius:5px; margin-bottom:5px; cursor:pointer; }
+.page-item.active { background:#d4f0fc; font-weight:600; }
+.page-buttons button { background:none; border:none; margin-left:5px; cursor:pointer; font-size:0.9em; }
+#editor-container { flex:1; padding:10px; display:flex; flex-direction:column; }
+#editor { flex:1; width:100%; padding:15px; border-radius:10px; border:1px solid #ccc; font-size:16px; resize:none; }
+#color-picker { margin-bottom:10px; width:60px; }
+</style>
+</head>
+<body>
+<header>
+<h1>مفكرة متقدمة</h1>
+<div>
+<button onclick="addPage()">+ صفحة جديدة</button>
+<button onclick="exportNotes()">تصدير</button>
+<button onclick="importNotes()">استيراد</button>
+<select id="fileType" title="اختر نوع الملف">
+<option value="txt">TXT</option>
+<option value="html">HTML</option>
+<option value="css">CSS</option>
+<option value="js">JS</option>
+<option value="json">JSON</option>
+</select>
+<input type="text" id="searchBox" placeholder="بحث..." oninput="searchPages()">
+</div>
+</header>
+<div id="main">
+<div id="sidebar">
+<h2>صفحاتك</h2>
+<div id="pagesList"></div>
+</div>
+<div id="editor-container">
+<input type="color" id="color-picker" onchange="changePageColor(this.value)" title="تغيير لون الصفحة">
+<textarea id="editor" placeholder="ابدأ الكتابة هنا..."></textarea>
+</div>
+</div>
+
+<script>
+// بيانات الصفحات
+let pages = JSON.parse(localStorage.getItem('advancedNotepadPages')) || [];
+let currentPage = 0;
+
+// حفظ الصفحات في LocalStorage
+function savePages() {
+localStorage.setItem('advancedNotepadPages', JSON.stringify(pages));
+}
+
+// عرض الصفحات في الشريط الجانبي
+function renderPages(filter='') {
+const list = document.getElementById('pagesList');
+list.innerHTML = '';
+pages.forEach((page, index) => {
+if(filter && !page.name.includes(filter) && !page.content.includes(filter)) return;
+const div = document.createElement('div');
+div.className = 'page-item' + (index===currentPage ? ' active':'');
+div.style.backgroundColor = page.color || '';
+div.innerHTML = `<span>${page.name}</span>
+<span class="page-buttons">
+<button onclick="renamePage(${index}, event)">✏</button>
+<button onclick="deletePage(${index}, event)">🗑</button>
+</span>`;
+div.onclick = () => { switchPage(index); };
+list.appendChild(div);
+});
+}
+
+// إضافة صفحة جديدة
+function addPage() {
+const name = prompt('أدخل اسم الصفحة الجديدة','صفحة جديدة');
+if(name) {
+pages.push({name:name, content:'', color:'#ffffff'});
+currentPage = pages.length-1;
+savePages();
+renderPages();
+loadPage();
+}
+}
+
+// إعادة تسمية الصفحة
+function renamePage(index,e){
+e.stopPropagation();
+const newName = prompt('أدخل الاسم الجديد:', pages[index].name);
+if(newName) pages[index].name = newName;
+savePages();
+renderPages();
+}
+
+// حذف الصفحة
+function deletePage(index,e){
+e.stopPropagation();
+if(confirm('هل أنت متأكد من حذف هذه الصفحة؟')) {
+pages.splice(index,1);
+if(currentPage >= pages.length) currentPage = pages.length-1;
+savePages();
+renderPages();
+loadPage();
+}
+}
+
+// تبديل الصفحة الحالية
+function switchPage(index){
+saveCurrentContent();
+currentPage=index;
+renderPages();
+loadPage();
+}
+
+// تحميل الصفحة الحالية في المحرر
+function loadPage(){
+if(pages[currentPage]){
+document.getElementById('editor').value = pages[currentPage].content;
+document.getElementById('color-picker').value = pages[currentPage].color || '#ffffff';
+}else{
+document.getElementById('editor').value='';
+}
+}
+
+// حفظ التعديلات الحالية تلقائي
+function saveCurrentContent(){
+if(pages[currentPage]){
+pages[currentPage].content = document.getElementById('editor').value;
+savePages();
+}
+}
+document.getElementById('editor').addEventListener('input', saveCurrentContent);
+
+// تغيير لون الصفحة
+function changePageColor(color){
+if(pages[currentPage]){
+pages[currentPage].color = color;
+savePages();
+renderPages();
+}
+}
+
+// البحث داخل الصفحات
+function searchPages(){
+const query = document.getElementById('searchBox').value;
+renderPages(query);
+}
+
+// تصدير الصفحة أو كل الصفحات
+function exportNotes(){
+const fileType = document.getElementById('fileType').value;
+let data = '';
+if(fileType === 'json'){
+data = JSON.stringify(pages, null, 2); // كل الصفحات
+} else {
+data = document.getElementById('editor').value; // الصفحة الحالية
+}
+const blob = new Blob([data], {type:'text/plain'});
+const a = document.createElement('a');
+a.href = URL.createObjectURL(blob);
+a.download = pages[currentPage].name + '.' + fileType;
+a.click();
+}
+
+// استيراد ملاحظات
+function importNotes(){
+const input = document.createElement('input');
+input.type='file';
+input.accept='.json,.txt,.html,.css,.js';
+input.onchange = e=>{
+const file = e.target.files[0];
+const reader = new FileReader();
+reader.onload = function(ev){
+try{
+if(file.name.endsWith('.json')){
+const imported = JSON.parse(ev.target.result);
+if(Array.isArray(imported)){
+pages = imported;
+currentPage=0;
+savePages();
+renderPages();
+loadPage();
+} else alert('ملف JSON غير صالح!');
+} else {
+// ملفات مفردة كـ txt, html, js, css
+const name = file.name.replace(/\.[^/.]+$/, "");
+pages.push({name:name, content:ev.target.result, color:'#ffffff'});
+currentPage = pages.length-1;
+savePages();
+renderPages();
+loadPage();
+}
+} catch(err){ alert('خطأ في قراءة الملف!'); }
+};
+reader.readAsText(file);
+};
+input.click();
+}
+
+// التحميل الأولي
+if(pages.length===0) addPage();
+else loadPage();
+renderPages();
+</script>
+</body>
+</html>
